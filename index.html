@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Combinar PDFs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+    body {
+        background-color: #ececec;
+        font-family: Arial, Helvetica, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+    }
+    .container {
+        text-align: center;
+        width: 90%;
+        max-width: 760px;
+        background-color: #f9f9f9;
+        padding: 22px;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+        position: relative;
+    }
+    h2 { font-weight: 700; color:#333; margin: 4px 0 18px; }
+
+    .drop-zone {
+        border: 2px dashed #a0a0a0;
+        padding: 20px;
+        margin: 14px 0;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        min-height: 140px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        transition: background-color .22s, border-color .22s, transform .12s;
+    }
+    .drop-zone.dragover {
+        background-color: #dedede;
+        border-color: #8fbc8f; /* verde acizentado */
+        transform: translateY(-3px);
+    }
+
+    .controls-row { display:flex; gap:12px; justify-content:center; align-items:center; flex-wrap:wrap; margin-top:8px; }
+
+    button.btn {
+        padding: 10px 18px;
+        background-color: #8fbc8f;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 15px;
+    }
+    button.btn:hover { background-color: #6e8f6e; }
+
+    .success-message {
+        font-size: 15px;
+        font-weight: 700;
+        color: #5f7a5f;
+        text-align: center;
+        display: none;
+        opacity: 0;
+        transition: opacity .35s ease-in-out;
+    }
+    .success-message.show {
+        display: block;
+        opacity: 1;
+    }
+
+    .lang-selector {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 8px;
+    }
+    .lang-selector img {
+        width: 32px;
+        height: 20px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        transition: border .18s, box-shadow .18s;
+    }
+    .lang-selector img.active {
+        border: 2px solid #333;
+        box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+
+    #download {
+        display: none;
+        padding: 10px 18px;
+        background-color: #356a35; /* verde escuro */
+        color: white;
+        border-radius: 6px;
+        text-decoration: none;
+        margin-top: 12px;
+        display: inline-block;
+    }
+    #download:hover { background-color: #2b522b; }
+
+    #filename-container {
+        display: none;
+        margin-top: 12px;
+    }
+    #filename {
+        padding: 8px;
+        width: 64%;
+        max-width: 320px;
+        border: 1px solid #cfcfcf;
+        border-radius: 6px;
+        margin-right: 8px;
+    }
+
+    /* responsividade simples */
+    @media (max-width:600px){
+        .container { width: 96%; padding: 14px; }
+        .drop-zone { min-height:120px; padding:14px; }
+        #filename { width: 58%; }
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="lang-selector">
+        <img id="ptFlag" src="https://upload.wikimedia.org/wikipedia/commons/5/5c/Flag_of_Portugal.svg" alt="PT" class="active" title="Português">
+        <img id="esFlag" src="https://upload.wikimedia.org/wikipedia/commons/9/9a/Flag_of_Spain.svg" alt="ES" title="Español">
+    </div>
+
+    <h2 id="title">Junta os teus PDF's</h2>
+
+    <!-- Zonas com ids para drag & drop -->
+    <div id="dropzone1" class="drop-zone">
+        <input type="file" id="pdf1" accept="application/pdf" style="display:none" />
+        <div class="controls-row">
+            <button id="btn1" class="btn">Escolher primeiro PDF</button>
+        </div>
+        <div id="message1" class="success-message">DOCUMENTO INSERIDO COM SUCESSO</div>
+    </div>
+
+    <div id="dropzone2" class="drop-zone">
+        <input type="file" id="pdf2" accept="application/pdf" style="display:none" />
+        <div class="controls-row">
+            <button id="btn2" class="btn">Escolher segundo PDF</button>
+        </div>
+        <div id="message2" class="success-message">DOCUMENTO INSERIDO COM SUCESSO</div>
+    </div>
+
+    <div id="dropzone3" class="drop-zone">
+        <input type="file" id="pdf3" accept="application/pdf" style="display:none" />
+        <div class="controls-row">
+            <button id="btn3" class="btn">Escolher terceiro PDF</button>
+        </div>
+        <div id="message3" class="success-message">DOCUMENTO INSERIDO COM SUCESSO</div>
+    </div>
+
+    <div style="margin-top:10px;">
+        <button id="combine" class="btn">Combinar PDFs</button>
+    </div>
+
+    <!-- pedir nome do ficheiro -->
+    <div id="filename-container">
+        <input id="filename" placeholder="Nome do arquivo (sem .pdf)">
+        <button id="confirmName" class="btn">Confirmar</button>
+    </div>
+
+    <div style="margin-top:8px;">
+        <a id="download">Baixar PDF combinado</a>
+        <button id="reset" class="btn btn-reset">Novo PDF</button>
+    </div>
+</div>
+
+<script>
+/* elementos */
+const dropzones = [
+    { drop: document.getElementById('dropzone1'), input: document.getElementById('pdf1'), button: document.getElementById('btn1'), message: document.getElementById('message1') },
+    { drop: document.getElementById('dropzone2'), input: document.getElementById('pdf2'), button: document.getElementById('btn2'), message: document.getElementById('message2') },
+    { drop: document.getElementById('dropzone3'), input: document.getElementById('pdf3'), button: document.getElementById('btn3'), message: document.getElementById('message3') },
+];
+
+const combineButton = document.getElementById('combine');
+const downloadLink = document.getElementById('download');
+const resetButton = document.getElementById('reset');
+const filenameContainer = document.getElementById('filename-container');
+const filenameInput = document.getElementById('filename');
+const confirmNameBtn = document.getElementById('confirmName');
+const ptFlag = document.getElementById('ptFlag');
+const esFlag = document.getElementById('esFlag');
+const titleEl = document.getElementById('title');
+
+let files = [null, null, null];
+let combinedPdfBytes = null;
+let lang = 'pt';
+
+/* textos */
+const text = {
+    pt: {
+        title: "Junta os teus PDF's",
+        select1: "Escolher primeiro PDF",
+        select2: "Escolher segundo PDF",
+        select3: "Escolher terceiro PDF",
+        success: "DOCUMENTO INSERIDO COM SUCESSO",
+        combine: "Combinar PDFs",
+        download: "Baixar PDF combinado",
+        reset: "Novo PDF",
+        alert: "Por favor, selecione pelo menos dois arquivos PDF.",
+        placeholder: "Nome do arquivo",
+        confirm: "Confirmar"
+    },
+    es: {
+        title: "Une tus PDFs",
+        select1: "Seleccionar primer PDF",
+        select2: "Seleccionar segundo PDF",
+        select3: "Seleccionar tercer PDF",
+        success: "DOCUMENTO INSERTADO CON ÉXITO",
+        combine: "Combinar PDFs",
+        download: "Descargar PDF combinado",
+        reset: "Nuevo PDF",
+        alert: "Por favor, selecciona al menos dos archivos PDF.",
+        placeholder: "Nombre del archivo",
+        confirm: "Confirmar"
+    }
+};
+
+/* função para actualizar idioma */
+function setLanguage(selectedLang) {
+    lang = selectedLang;
+    titleEl.textContent = text[lang].title;
+    document.getElementById('btn1').textContent = text[lang].select1;
+    document.getElementById('btn2').textContent = text[lang].select2;
+    document.getElementById('btn3').textContent = text[lang].select3;
+    document.getElementById('message1').textContent = text[lang].success;
+    document.getElementById('message2').textContent = text[lang].success;
+    document.getElementById('message3').textContent = text[lang].success;
+    combineButton.textContent = text[lang].combine;
+    downloadLink.textContent = text[lang].download;
+    resetButton.textContent = text[lang].reset;
+    filenameInput.placeholder = text[lang].placeholder;
+    confirmNameBtn.textContent = text[lang].confirm;
+
+    ptFlag.classList.toggle('active', lang === 'pt');
+    esFlag.classList.toggle('active', lang === 'es');
+}
+
+/* liga bandeiras */
+ptFlag.addEventListener('click', () => setLanguage('pt'));
+esFlag.addEventListener('click', () => setLanguage('es'));
+
+/* função que trata ficheiro (usada por drop e por input change) */
+function handleFileSuccess(file, messageElement, buttonElement, index) {
+    // guarda o ficheiro no index correspondente (substitui se já existir)
+    files[index] = file;
+
+    // esconder botão e mostrar mensagem
+    buttonElement.style.display = 'none';
+    messageElement.classList.add('show');
+
+    // limpar possível estado de filename anterior e link
+    combinedPdfBytes = null;
+    downloadLink.style.display = 'none';
+    filenameContainer.style.display = 'none';
+}
+
+/* configurar cada zona: drag/drop, botão e input */
+dropzones.forEach((zone, index) => {
+    // dragover
+    zone.drop.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.drop.classList.add('dragover');
+    });
+    zone.drop.addEventListener('dragleave', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.drop.classList.remove('dragover');
+    });
+
+    // drop
+    zone.drop.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.drop.classList.remove('dragover');
+        const dtFiles = e.dataTransfer && e.dataTransfer.files;
+        if (dtFiles && dtFiles.length > 0) {
+            // usamos apenas o primeiro ficheiro solto na zona
+            handleFileSuccess(dtFiles[0], zone.message, zone.button, index);
+        }
+    });
+
+    // botão: limpa input.value para garantir evento change mesmo com o mesmo ficheiro
+    zone.button.addEventListener('click', () => {
+        try { zone.input.value = ''; } catch(e) {}
+        zone.input.click();
+    });
+
+    // input change (seleção manual)
+    zone.input.addEventListener('change', e => {
+        const inputFiles = e.target.files;
+        if (inputFiles && inputFiles.length > 0) {
+            handleFileSuccess(inputFiles[0], zone.message, zone.button, index);
+        }
+    });
+});
+
+/* combinar ao clicar */
+combineButton.addEventListener('click', async () => {
+    const selectedFiles = files.filter(f => f !== null);
+    if (selectedFiles.length < 2) {
+        alert(text[lang].alert);
+        return;
+    }
+
+    // cria novo PDF com pdf-lib
+    const pdfDoc = await PDFLib.PDFDocument.create();
+    for (const file of selectedFiles) {
+        const pdfBytes = await file.arrayBuffer();
+        const toAdd = await PDFLib.PDFDocument.load(pdfBytes);
+        const pages = await pdfDoc.copyPages(toAdd, toAdd.getPageIndices());
+        pages.forEach(p => pdfDoc.addPage(p));
+    }
+    combinedPdfBytes = await pdfDoc.save();
+
+    // mostra caixa para nome do ficheiro (entre combinar e download)
+    filenameContainer.style.display = 'block';
+    filenameInput.value = ''; // limpa campo
+    filenameInput.focus();
+});
+
+/* confirmar nome e criar link de download */
+confirmNameBtn.addEventListener('click', () => {
+    if (!combinedPdfBytes) return;
+    let name = (filenameInput.value || '').trim();
+    if (name === '') name = 'pdf_combinado';
+    const blob = new Blob([combinedPdfBytes], { type: 'application/pdf' });
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = name + '.pdf';
+    downloadLink.style.display = 'inline-block';
+    //esconder a caixa de nome depois
+    filenameContainer.style.display = 'none';
+});
+
+/* reset */
+resetButton.addEventListener('click', () => {
+    files = [null, null, null];
+    combinedPdfBytes = null;
+    downloadLink.style.display = 'none';
+    filenameContainer.style.display = 'none';
+    filenameInput.value = '';
+    dropzones.forEach(z => {
+        z.input.value = '';
+        z.button.style.display = 'inline-block';
+        z.message.classList.remove('show');
+        z.drop.classList.remove('dragover');
+    });
+});
+</script>
+</body>
+</html>
